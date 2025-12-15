@@ -1,4 +1,4 @@
-# CourtReserve Booker
+# CourtReserve Sniper
 
 Automated booking tool for CourtReserve using Playwright. Features intelligent calendar navigation, conflict detection via Kendo UI DataSource, and precise execution timing.
 
@@ -52,3 +52,14 @@ If the script fails in headless mode (production):
 *   **Priority Courts:** Define `PREFERRED_COURTS = ["Court 1", "Court 2"]` in `config.py`. The bot tries them in order before settling for any available court.
 *   **Exact Match Duration:** Uses `:text-is()` to avoid confusing "1 hour" with "1 hour 30 mins".
 *   **Smart Waiting:** If `EXECUTION_TIME` is set (e.g., "08:00:00"), the bot fills the form and sleeps until that exact second to click "Save", maximizing your chances of beating others to the slot.
+
+### 🔑 Session Persistence (Avoid Frequent Logins)
+
+The bot automatically saves your session cookies to `auth.json`. 
+*   **First Run:** The bot will log in normally and create the file.
+*   **Subsequent Runs:** The bot detects the file, loads the cookies, and skips the login screen (unless the session has expired).
+
+**Manual Setup (Optional):**
+If you want to create the session file manually (e.g., to handle a CAPTCHA once), run:
+```bash
+python setup_auth.py

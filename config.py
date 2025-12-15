@@ -42,8 +42,9 @@ EXECUTION_TIME = "18:00:00"
 SNIPE_BUFFER_SECONDS = 20.0
 
 # --- SYSTEM SETTINGS ---
-HEADLESS = True  
+HEADLESS = True
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+AUTH_FILE = "auth.json" # Stores cookies/session
 
 # --- URLS ---
 LOGIN_URL = "https://app.courtreserve.com/Online/Account/Login/7031"

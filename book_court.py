@@ -3,7 +3,8 @@ import asyncio
 import argparse
 import logging
 import sys
-import time
+import os # Added for file checking
+import re
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 import config
@@ -261,23 +262,64 @@ async def main():
     
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=config.HEADLESS)
-        context = await browser.new_context(user_agent=config.USER_AGENT)
+        
+        # 1. CONTEXT SETUP (Load Cookies if they exist)
+        context_options = {
+            "user_agent": config.USER_AGENT,
+            "viewport": {"width": 1280, "height": 720}
+        }
+        
+        if os.path.exists(config.AUTH_FILE):
+            logger.info(f"🍪 Found {config.AUTH_FILE}. Loading session...")
+            context_options["storage_state"] = config.AUTH_FILE
+            
+        context = await browser.new_context(**context_options)
+        
+        # Start Trace
         await context.tracing.start(screenshots=True, snapshots=True)
         page = await context.new_page()
 
         try:
-            # 1. Login & Navigate
-            await page.goto(config.LOGIN_URL)
-            await page.fill(config.SELECTORS["email"], config.USERNAME)
-            await page.fill(config.SELECTORS["password"], config.PASSWORD)
-            await page.click(config.SELECTORS["login_btn"])
-            try: await page.wait_for_url("**/Online/Portal/**", timeout=15000)
-            except: pass
-            
+            # 2. CHECK SESSION STATUS
+            # We go directly to the Scheduler. If cookies are good, we stay there.
+            # If cookies are bad/missing, we get redirected to Login.
+            logger.info("Navigate to Scheduler...")
             await page.goto(config.get_scheduler_url())
+            
+            # Allow potential redirect to happen
+            try:
+                await page.wait_for_load_state("networkidle", timeout=5000)
+            except: pass
+
+            # Check if we are on the Login page
+            if "Account/Login" in page.url:
+                logger.info("🔓 Session expired or missing. Logging in...")
+                
+                await page.fill(config.SELECTORS["email"], config.USERNAME)
+                await page.fill(config.SELECTORS["password"], config.PASSWORD)
+                await page.click(config.SELECTORS["login_btn"])
+                
+                # Wait for redirect to Portal or Scheduler
+                try:
+                    await page.wait_for_url("**/Online/**", timeout=15000)
+                    logger.info("✅ Login Successful.")
+                    
+                    # SAVE COOKIES FOR NEXT TIME
+                    await context.storage_state(path=config.AUTH_FILE)
+                    logger.info(f"💾 Session saved to {config.AUTH_FILE}")
+                    
+                    # Ensure we are back on scheduler
+                    if "Reservations/Bookings" not in page.url:
+                        await page.goto(config.get_scheduler_url())
+                except Exception as e:
+                    logger.error("❌ Login failed.")
+                    raise e
+            else:
+                logger.info("✅ Session Valid! Skipped Login.")
+
+            # 3. PROCEED WITH BOOKING (Standard Logic)
             await navigate_to_date(page, target_date)
 
-            # 2. Pre-Fill Form
             dur_mins = parse_duration_minutes(config.DURATION)
             if not await select_court(page, args.time, dur_mins):
                 raise Exception("Slot selection failed")
@@ -285,7 +327,6 @@ async def main():
             await fill_form(page)
             logger.info("✅ FORM PRE-FILLED. Holding for execution time...")
 
-            # 3. Wait & Snipe
             if args.dry_run:
                 logger.info("🛑 DRY RUN: Skipping save.")
             else:
@@ -293,9 +334,11 @@ async def main():
                 await page.click(config.SELECTORS["save_btn"])
                 logger.info("✅ SAVE BUTTON CLICKED")
                 
-                # Wait for result
                 await asyncio.sleep(5)
                 await page.screenshot(path="success_booking.png")
+                
+                # Save cookies again to keep session fresh
+                await context.storage_state(path=config.AUTH_FILE)
 
         except Exception as e:
             logger.error(f"💥 ERROR: {e}")
