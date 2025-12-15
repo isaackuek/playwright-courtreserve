@@ -1,4 +1,4 @@
-# CourtReserve Sniper
+# CourtReserve Booker
 
 Automated booking tool for CourtReserve using Playwright. Features intelligent calendar navigation, conflict detection via Kendo UI DataSource, and precise execution timing.
 
